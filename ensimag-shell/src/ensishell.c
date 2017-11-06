@@ -11,7 +11,9 @@
 
 #include "variante.h"
 #include "readcmd.h"
-
+#include <unistd.h>
+#include <sys/wait.h>
+#include <sys/types.h>
 #ifndef VARIANTE
 #error "Variante non défini !!"
 #endif
@@ -21,6 +23,41 @@
  * following lines.  You may also have to comment related pkg-config
  * lines in CMakeLists.txt.
  */
+struct job {
+	pid_t pid;
+	char* nom_cmd;
+	struct job* next;
+};
+struct job *JOBS = NULL;
+
+void ajout(pid_t pid, char* nom) {
+	struct job * nouv = malloc(sizeof(struct job));
+	nouv -> pid = pid;
+	printf("%s\n", nom);
+	nouv -> nom_cmd = nom;
+	nouv -> next = NULL;
+	if (JOBS == NULL) {
+		JOBS = nouv;
+	} else {
+		struct job * current = JOBS;
+		while (current -> next != NULL) {
+			current = current -> next;
+		}
+		current -> next = nouv;
+	}
+}
+
+void print_jobs(void) {
+	struct job * current = JOBS;
+	if (JOBS != NULL) {
+		while (current != NULL) {
+			printf("PID: %i, CMD: %s \n", current -> pid, current -> nom_cmd);
+			current = current -> next;
+		}
+	} else {
+		printf("Aucune tâche en arrière-plan\n");
+	}
+}
 
 #if USE_GUILE == 1
 #include <libguile.h>
@@ -36,7 +73,7 @@ int question6_executer(char *line)
 
 	/* Remove this line when using parsecmd as it will free it */
 	free(line);
-	
+
 	return 0;
 }
 
@@ -71,7 +108,7 @@ int main() {
 	while (1) {
 		struct cmdline *l;
 		char *line=0;
-		int i, j;
+		int i;
 		char *prompt = "ensishell>";
 
 		/* Readline use some internal memory structure that
@@ -103,12 +140,9 @@ int main() {
 
 		/* If input stream closed, normal termination */
 		if (!l) {
-		  
 			terminate(0);
 		}
-		
 
-		
 		if (l->err) {
 			/* Syntax error, read another command */
 			printf("error: %s\n", l->err);
@@ -122,11 +156,38 @@ int main() {
 		/* Display each command of the pipe */
 		for (i=0; l->seq[i]!=0; i++) {
 			char **cmd = l->seq[i];
-			printf("seq[%d]: ", i);
-                        for (j=0; cmd[j]!=0; j++) {
-                                printf("'%s' ", cmd[j]);
-                        }
-			printf("\n");
+			// printf("seq[%d]: ", i);
+      //                   for (j=0; cmd[j]!=0; j++) {
+      //                           printf("'%s' ", cmd[j]);
+      //                   }
+			// printf("\n");
+			if (strcmp(cmd[0],"jobs") == 0) {
+				print_jobs();
+			} else {
+				pid_t pid = fork();
+				if (pid == 0) {
+					char reponse[60];
+					char * chemin = "/bin/";
+					char * vide = "";
+					if (cmd[0][0] != '/') {
+						strcpy(reponse, chemin);
+					} else {
+						strcpy(reponse, vide);
+					}
+					strcat(reponse, cmd[0]);
+					if (l->bg) {
+						setpgid(0,0);
+					}
+					execvp(reponse, cmd);
+				} else {
+					if (! l->bg) {
+						waitpid(pid, NULL, 0);
+					} else {
+						ajout(pid, cmd[0]);
+					}
+				}
+			}
+
 		}
 	}
 
