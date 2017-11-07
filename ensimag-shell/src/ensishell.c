@@ -206,12 +206,12 @@ void loop_tube(struct cmdline* l) {
 			exit(EXIT_FAILURE);
 		} else if (pid == 0) {
 			if (l-> seq[i+1] != NULL) {
+				dup2(p[1], STDOUT_FILENO);
+			} else {
 				if (l -> out) {
 					int file_out = creat(l->out, S_IRWXU);
 					dup2(file_out, STDOUT_FILENO);
 					close(file_out);
-				} else {
-					dup2(p[1], STDOUT_FILENO);
 				}
 			}
 			close(p[0]);
