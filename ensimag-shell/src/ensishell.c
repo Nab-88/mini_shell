@@ -88,6 +88,66 @@ void print_jobs(void) {
 	}
 }
 
+void command(char** cmd, struct cmdline * l) {
+	if (strcmp(cmd[0],"jobs") == 0) {
+		print_jobs();
+	} else {
+		pid_t pid = fork();
+		if (pid == 0) {
+			char reponse[60];
+			char * chemin = "/bin/";
+			char * vide = "";
+			if (cmd[0][0] != '/') {
+				strcpy(reponse, chemin);
+			} else {
+				strcpy(reponse, vide);
+			}
+			strcat(reponse, cmd[0]);
+			if (l->bg) {
+				setpgid(0,0);
+			}
+			execvp(reponse, cmd);
+			printf("bash : %s : command not found ...\n", cmd[0]);
+		} else {
+			if (! l->bg) {
+				waitpid(pid, NULL, 0);
+			} else {
+				ajout(pid, cmd[0]);
+			}
+		}
+	}
+}
+
+void tube(char ** cmd1, char ** cmd2, struct cmdline *l) {
+	if (strcmp(cmd1[0],"jobs") == 0) {
+		command(cmd2, l);
+	} else if (strcmp(cmd2[0],"jobs") == 0) {
+		print_jobs();
+	} else {
+		pid_t pid = fork();
+		if (pid == 0) {
+			int fd[2];
+			pipe(fd);
+			pid_t child_pid = fork();
+			if (child_pid == 0) {
+				dup2(fd[1], STDOUT_FILENO);
+				close(fd[0]);
+				close(fd[1]);
+				execvp(cmd1[0], cmd1);
+				printf("bash : %s : command not found ...\n", cmd1[0]);
+			} else {
+				dup2(fd[0], STDIN_FILENO);
+				close(fd[0]);
+				close(fd[1]);
+				execvp(cmd2[0], cmd2);
+				printf("bash : %s : command not found ...\n", cmd2[0]);
+			}
+		} else {
+				waitpid(pid, NULL, 0);
+			}
+	}
+}
+
 #if USE_GUILE == 1
 #include <libguile.h>
 
@@ -137,7 +197,7 @@ int main() {
 	while (1) {
 		struct cmdline *l;
 		char *line=0;
-		int i;
+		int i, j;
 		char *prompt = "ensishell>";
 
 		/* Readline use some internal memory structure that
@@ -185,38 +245,16 @@ int main() {
 		/* Display each command of the pipe */
 		for (i=0; l->seq[i]!=0; i++) {
 			char **cmd = l->seq[i];
-			// printf("seq[%d]: ", i);
-      //                   for (j=0; cmd[j]!=0; j++) {
-      //                           printf("'%s' ", cmd[j]);
-      //                   }
-			// printf("\n");
-			if (strcmp(cmd[0],"jobs") == 0) {
-				print_jobs();
-			} else {
-				pid_t pid = fork();
-				if (pid == 0) {
-					char reponse[60];
-					char * chemin = "/bin/";
-					char * vide = "";
-					if (cmd[0][0] != '/') {
-						strcpy(reponse, chemin);
-					} else {
-						strcpy(reponse, vide);
-					}
-					strcat(reponse, cmd[0]);
-					if (l->bg) {
-						setpgid(0,0);
-					}
-					execvp(reponse, cmd);
-				} else {
-					if (! l->bg) {
-						waitpid(pid, NULL, 0);
-					} else {
-						ajout(pid, cmd[0]);
-					}
-				}
-			}
-
+			printf("seq[%d]: ", i);
+                        for (j=0; cmd[j]!=0; j++) {
+                                printf("'%s' ", cmd[j]);
+                        }
+			printf("\n");
+		}
+		if (l->seq[1] == 0) {
+			command(l->seq[0], l);
+		} else {
+			tube(l->seq[0], l-> seq[1], l);
 		}
 	}
 
