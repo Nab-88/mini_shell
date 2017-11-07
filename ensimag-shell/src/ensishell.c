@@ -14,6 +14,7 @@
 #include <unistd.h>
 #include <sys/wait.h>
 #include <sys/types.h>
+#include <fcntl.h>
 #ifndef VARIANTE
 #error "Variante non défini !!"
 #endif
@@ -106,7 +107,17 @@ void command(char** cmd, struct cmdline * l) {
 			if (l->bg) {
 				setpgid(0,0);
 			}
-			execvp(reponse, cmd);
+			if (l -> in) {
+				int file_in = open(l->in, O_RDONLY, 0);
+				dup2(file_in, STDIN_FILENO);
+				close(file_in);
+			}
+			if (l -> out) {
+				int file_out = creat(l->out, S_IRWXU);
+				dup2(file_out, STDOUT_FILENO);
+				close(file_out);
+			}
+			execvp(cmd[0], cmd);
 			printf("bash : %s : command not found ...\n", cmd[0]);
 		} else {
 			if (! l->bg) {
@@ -133,12 +144,22 @@ void tube(char ** cmd1, char ** cmd2, struct cmdline *l) {
 				dup2(fd[1], STDOUT_FILENO);
 				close(fd[0]);
 				close(fd[1]);
+				if (l -> in) {
+					int file_in = open(l->in, O_RDONLY, 0);
+					dup2(file_in, STDIN_FILENO);
+					close(file_in);
+				}
 				execvp(cmd1[0], cmd1);
 				printf("bash : %s : command not found ...\n", cmd1[0]);
 			} else {
 				dup2(fd[0], STDIN_FILENO);
 				close(fd[0]);
 				close(fd[1]);
+				if (l -> out) {
+					int file_out = creat(l->out, S_IRWXU);
+					dup2(file_out, STDOUT_FILENO);
+					close(file_out);
+				}
 				execvp(cmd2[0], cmd2);
 				printf("bash : %s : command not found ...\n", cmd2[0]);
 			}
@@ -158,11 +179,8 @@ int question6_executer(char *line)
 	 * parsecmd, then fork+execvp, for a single command.
 	 * pipe and i/o redirection are not required.
 	 */
-	printf("Not implemented yet: can not execute %s\n", line);
-
-	/* Remove this line when using parsecmd as it will free it */
-	free(line);
-
+	struct cmdline *l = parsecmd( & line);
+	command(l->seq[0], l);
 	return 0;
 }
 
@@ -251,6 +269,7 @@ int main() {
                         }
 			printf("\n");
 		}
+
 		if (l->seq[1] == 0) {
 			command(l->seq[0], l);
 		} else {
