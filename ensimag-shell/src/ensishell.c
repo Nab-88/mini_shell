@@ -14,6 +14,7 @@
 #include <unistd.h>
 #include <sys/wait.h>
 #include <sys/types.h>
+#include <sys/time.h>
 #include <fcntl.h>
 #ifndef VARIANTE
 #error "Variante non défini !!"
@@ -27,6 +28,7 @@
 struct job {
 	pid_t pid;
 	char* nom_cmd;
+	struct timeval temps;
 	struct job* next;
 };
 struct job *JOBS = NULL;
@@ -37,6 +39,7 @@ void ajout(pid_t pid, char* nom) {
 	char* cpy_nom = malloc(sizeof(char) * strlen(nom));
 	strcpy(cpy_nom, nom);
 	nouv -> nom_cmd = cpy_nom;
+	gettimeofday(&(nouv-> temps), NULL);
 	nouv -> next = NULL;
 	if (JOBS == NULL) {
 		JOBS = nouv;
@@ -89,6 +92,21 @@ void print_jobs(void) {
 	}
 }
 
+static void dead(int sig, siginfo_t *siginfo, void *context) {
+	struct job * current = JOBS;
+	if (JOBS != NULL) {
+		while (current != NULL) {
+			if (current -> pid == siginfo -> si_pid) {
+				struct timeval fin;
+				gettimeofday(&fin, NULL);
+				int temps = (double) fin.tv_usec - (double)(current -> temps).tv_usec;
+				printf("PID : %i is dead. It lasted %d ms\n", current -> pid, temps);
+			}
+			current = current -> next;
+		}
+	}
+}
+
 void command(char** cmd, struct cmdline * l) {
 	if (strcmp(cmd[0],"jobs") == 0) {
 		print_jobs();
@@ -124,6 +142,13 @@ void command(char** cmd, struct cmdline * l) {
 				waitpid(pid, NULL, 0);
 			} else {
 				ajout(pid, cmd[0]);
+				struct sigaction act;
+				memset(&act, '\0', sizeof(act));
+				act.sa_sigaction = &dead;
+				act.sa_flags = SA_SIGINFO;
+				if (sigaction(SIGCHLD, &act, NULL) < 0) {
+					perror("sigaction");
+				}
 			}
 		}
 	}
@@ -166,6 +191,46 @@ void tube(char ** cmd1, char ** cmd2, struct cmdline *l) {
 		} else {
 				waitpid(pid, NULL, 0);
 			}
+	}
+}
+
+void loop_tube(struct cmdline* l) {
+	int p[2];
+	pid_t pid;
+	int file_in = 0;
+	char ** cmd = l -> seq[0];
+	int i = 0;
+	while (cmd != 0) {
+		pipe(p);
+		if ((pid = fork()) == -1) {
+			exit(EXIT_FAILURE);
+		} else if (pid == 0) {
+			if (l-> seq[i+1] != NULL) {
+				if (l -> out) {
+					int file_out = creat(l->out, S_IRWXU);
+					dup2(file_out, STDOUT_FILENO);
+					close(file_out);
+				} else {
+					dup2(p[1], STDOUT_FILENO);
+				}
+			}
+			close(p[0]);
+			if (l -> in && i == 0) {
+				int file_in = open(l->in, O_RDONLY, 0);
+				dup2(file_in, STDIN_FILENO);
+				close(file_in);
+			} else {
+				dup2(file_in, 0);
+			}
+			execvp(cmd[0], cmd);
+			printf("bash : %s : command not found ...\n", cmd[0]);
+		} else {
+			wait(NULL);
+			close(p[1]);
+			file_in = p[0];
+			i++;
+			cmd = l -> seq[i];
+		}
 	}
 }
 
@@ -272,8 +337,10 @@ int main() {
 
 		if (l->seq[1] == 0) {
 			command(l->seq[0], l);
-		} else {
+		} else if (l-> seq[2] == 0) {
 			tube(l->seq[0], l-> seq[1], l);
+		} else {
+			loop_tube(l);
 		}
 	}
 
