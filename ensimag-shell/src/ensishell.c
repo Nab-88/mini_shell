@@ -33,8 +33,9 @@ struct job *JOBS = NULL;
 void ajout(pid_t pid, char* nom) {
 	struct job * nouv = malloc(sizeof(struct job));
 	nouv -> pid = pid;
-	printf("%s\n", nom);
-	nouv -> nom_cmd = nom;
+	char* cpy_nom = malloc(sizeof(char) * strlen(nom));
+	strcpy(cpy_nom, nom);
+	nouv -> nom_cmd = cpy_nom;
 	nouv -> next = NULL;
 	if (JOBS == NULL) {
 		JOBS = nouv;
@@ -47,7 +48,35 @@ void ajout(pid_t pid, char* nom) {
 	}
 }
 
+void supprime(pid_t pid) {
+	struct job * ancient = JOBS;
+	struct job * current = JOBS -> next;
+	if (ancient -> pid == pid) {
+		JOBS = current;
+	} else {
+		while (current != NULL && current -> pid != pid) {
+			current = current -> next;
+		}
+		if (current != NULL) {
+			ancient -> next = current -> next;
+		}
+	}
+}
+
+void mis_a_jour(void) {
+	struct job * current = JOBS;
+	if (JOBS != NULL) {
+		while (current != NULL) {
+			if (waitpid(current -> pid, NULL, WNOHANG)) {
+				supprime(current -> pid);
+			}
+			current = current -> next;
+		}
+	}
+}
+
 void print_jobs(void) {
+	mis_a_jour();
 	struct job * current = JOBS;
 	if (JOBS != NULL) {
 		while (current != NULL) {
