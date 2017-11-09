@@ -16,7 +16,7 @@
 #include <sys/types.h>
 #include <sys/time.h>
 #include <fcntl.h>
-#ifndef VARIANTE
+#ifndef VARIANTE 
 #error "Variante non défini !!"
 #endif
 
@@ -99,8 +99,8 @@ static void dead(int sig, siginfo_t *siginfo, void *context) {
 			if (current -> pid == siginfo -> si_pid) {
 				struct timeval fin;
 				gettimeofday(&fin, NULL);
-				int temps = (double) fin.tv_usec - (double)(current -> temps).tv_usec;
-				printf("PID : %i is dead. It lasted %d ms\n", current -> pid, temps);
+				int temps = (double) fin.tv_sec - (double)(current -> temps).tv_sec;
+				printf("PID : %i is dead. It lasted %d s\n", current -> pid, temps);
 			}
 			current = current -> next;
 		}
@@ -280,7 +280,7 @@ int main() {
 	while (1) {
 		struct cmdline *l;
 		char *line=0;
-		int i, j;
+		// int i, j;
 		char *prompt = "ensishell>";
 
 		/* Readline use some internal memory structure that
@@ -326,14 +326,14 @@ int main() {
 		if (l->bg) printf("background (&)\n");
 
 		/* Display each command of the pipe */
-		for (i=0; l->seq[i]!=0; i++) {
-			char **cmd = l->seq[i];
-			printf("seq[%d]: ", i);
-                        for (j=0; cmd[j]!=0; j++) {
-                                printf("'%s' ", cmd[j]);
-                        }
-			printf("\n");
-		}
+		// for (i=0; l->seq[i]!=0; i++) {
+		// 	char **cmd = l->seq[i];
+		// 	printf("seq[%d]: ", i);
+    //                     for (j=0; cmd[j]!=0; j++) {
+    //                             printf("'%s' ", cmd[j]);
+    //                     }
+		// 	printf("\n");
+		// }
 
 		if (l->seq[1] == 0) {
 			command(l->seq[0], l);
